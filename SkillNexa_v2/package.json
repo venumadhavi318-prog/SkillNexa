@@ -1,0 +1,16 @@
+{
+  "name": "skillnexa",
+  "version": "2.0.0",
+  "description": "SkillNexa branch-based AI learning platform",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "firebase": "^12.18.0"
+  }
+}
