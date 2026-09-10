@@ -14,7 +14,51 @@
     "completedLevels": {},
     "assignmentHistory": [],
     "testHistory": [],
-    "selectedCourse": "data-analysis"
+    "selectedCourse": "python",
+    "learnedTopics": [
+      {
+        "courseId": "python",
+        "level": 1,
+        "topicTitle": "Python Introduction foundation",
+        "learnedAt": "2026-09-10T03:52:20.106Z",
+        "isFree": true
+      }
+    ],
+    "topicProgress": {
+      "python": {
+        "python:1:Python Introduction foundation": {
+          "completed": true,
+          "learned": true,
+          "started": true,
+          "viewed": true,
+          "courseId": "python",
+          "level": 1,
+          "topicTitle": "Python Introduction foundation",
+          "completedAt": "2026-09-10T04:16:45.899Z",
+          "isFree": true
+        }
+      }
+    },
+    "lessonProgress": {
+      "python:1:Python Introduction foundation": {
+        "viewed": true,
+        "completed": true,
+        "started": true,
+        "isFree": true,
+        "courseId": "python",
+        "level": 1,
+        "topicTitle": "Python Introduction foundation"
+      }
+    },
+    "courseProgress": {
+      "python": 3
+    },
+    "assignmentAttempts": {},
+    "assignmentQuestionHistory": [],
+    "testQuestionHistory": [],
+    "testAttempts": {},
+    "currentLevel": 1,
+    "points": 0
   },
   {
     "id": "6304e688-1e6e-4848-8a87-ad87057451d6",
@@ -30,7 +74,18 @@
     "completedCourses": [],
     "completedLevels": {},
     "assignmentHistory": [],
-    "testHistory": []
+    "testHistory": [],
+    "points": 0,
+    "selectedCourse": null,
+    "learnedTopics": [],
+    "topicProgress": {},
+    "lessonProgress": {},
+    "courseProgress": {},
+    "assignmentAttempts": {},
+    "assignmentQuestionHistory": [],
+    "testQuestionHistory": [],
+    "testAttempts": {},
+    "currentLevel": 1
   },
   {
     "id": "fa3cc210-96bb-414a-9e78-82a1e6f26b1e",
@@ -46,7 +101,18 @@
     "completedCourses": [],
     "completedLevels": {},
     "assignmentHistory": [],
-    "testHistory": []
+    "testHistory": [],
+    "points": 0,
+    "selectedCourse": null,
+    "learnedTopics": [],
+    "topicProgress": {},
+    "lessonProgress": {},
+    "courseProgress": {},
+    "assignmentAttempts": {},
+    "assignmentQuestionHistory": [],
+    "testQuestionHistory": [],
+    "testAttempts": {},
+    "currentLevel": 1
   },
   {
     "id": "a03b4c16-5e4d-4450-9051-e33edce9261a",
@@ -62,7 +128,18 @@
     "completedCourses": [],
     "completedLevels": {},
     "assignmentHistory": [],
-    "testHistory": []
+    "testHistory": [],
+    "points": 0,
+    "selectedCourse": null,
+    "learnedTopics": [],
+    "topicProgress": {},
+    "lessonProgress": {},
+    "courseProgress": {},
+    "assignmentAttempts": {},
+    "assignmentQuestionHistory": [],
+    "testQuestionHistory": [],
+    "testAttempts": {},
+    "currentLevel": 1
   },
   {
     "id": "c97d8b93-b4e0-4302-aee9-c264500ae621",
@@ -78,7 +155,18 @@
     "completedCourses": [],
     "completedLevels": {},
     "assignmentHistory": [],
-    "testHistory": []
+    "testHistory": [],
+    "points": 0,
+    "selectedCourse": null,
+    "learnedTopics": [],
+    "topicProgress": {},
+    "lessonProgress": {},
+    "courseProgress": {},
+    "assignmentAttempts": {},
+    "assignmentQuestionHistory": [],
+    "testQuestionHistory": [],
+    "testAttempts": {},
+    "currentLevel": 1
   },
   {
     "id": "52424659-b7ae-4901-ae55-180bb16b35cd",
@@ -95,7 +183,17 @@
     "completedLevels": {},
     "assignmentHistory": [],
     "testHistory": [],
-    "selectedCourse": "c-programming"
+    "selectedCourse": "c-programming",
+    "points": 0,
+    "learnedTopics": [],
+    "topicProgress": {},
+    "lessonProgress": {},
+    "courseProgress": {},
+    "assignmentAttempts": {},
+    "assignmentQuestionHistory": [],
+    "testQuestionHistory": [],
+    "testAttempts": {},
+    "currentLevel": 1
   },
   {
     "id": "e43b2f13-1659-4609-8db4-07750231f88a",
@@ -112,6 +210,16 @@
     "completedLevels": {},
     "assignmentHistory": [],
     "testHistory": [],
-    "selectedCourse": "autocad-for-civil-engineering"
+    "selectedCourse": "autocad-for-civil-engineering",
+    "points": 0,
+    "learnedTopics": [],
+    "topicProgress": {},
+    "lessonProgress": {},
+    "courseProgress": {},
+    "assignmentAttempts": {},
+    "assignmentQuestionHistory": [],
+    "testQuestionHistory": [],
+    "testAttempts": {},
+    "currentLevel": 1
   }
 ]

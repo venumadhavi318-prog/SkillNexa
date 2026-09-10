@@ -27,10 +27,54 @@ SkillNexa/
 
 1. Copy `.env.example` to `.env`.
 2. Put your Gemini API key in `GEMINI_API_KEY`.
-3. Open terminal in the SkillNexa folder.
-4. Run `npm install`.
-5. Run `npm start`.
-6. Open `http://localhost:3000`.
+3. Put your Firebase Admin environment variables in `.env`.
+4. If you are using a service account file, place it at `firebase-service-account.json` and do not commit it.
+5. Open terminal in the SkillNexa folder.
+6. Run `npm install`.
+7. Run `npm start`.
+8. Open `http://localhost:3000`.
+
+## Firebase setup
+
+1. Create a Firebase project in the Firebase Console.
+2. Enable Firebase Authentication and choose the email/password provider if you want the existing register/login flow to carry Firebase auth semantics.
+3. Enable Firestore Database and set the project region.
+4. Enable Cloud Storage for optional assignment/test artifact upload and profile file storage.
+5. Create a service account and download the private JSON credentials file.
+6. Put the service account details into a local `.env` file using the variables in `.env.example`.
+7. Never commit the downloaded service-account JSON file or any real private key into Git.
+8. The server reads `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`, `FIREBASE_STORAGE_BUCKET`, and `GOOGLE_APPLICATION_CREDENTIALS` from the environment. If `FIREBASE_SERVICE_ACCOUNT_JSON` is set, it is parsed in memory and used instead of the file.
+9. The existing API routes continue to use the same JWT token exchange and the server-side file-backed student model. The Firebase adapter mirrors the student records, history, topic completion events, assignment attempts, daily test records, and uploaded storage objects to Firestore/Storage when Firebase credentials are configured.
+
+## Firestore student document model
+
+When Firebase Admin is configured, the server writes the normalized student document to the `students` collection. Student records keep the existing points model:
+
+```json
+{
+  "id": "student-uuid",
+  "name": "Student Name",
+  "email": "student@example.com",
+  "education": "B.Tech",
+  "branch": "CSE",
+  "role": "student",
+  "points": 0,
+  "selectedCourse": "python",
+  "learnedTopics": [],
+  "topicProgress": {},
+  "lessonProgress": {},
+  "courseProgress": {},
+  "completedLevels": {},
+  "completedCourses": [],
+  "assignmentHistory": [],
+  "assignmentAttempts": {},
+  "testHistory": [],
+  "testQuestionHistory": [],
+  "createdAt": "ISO-date"
+}
+```
+
+The project keeps the existing `student.points` domain model and does not replace points with coins. The route continues to use `totalPoints` internally for historical compatibility and maps it to `points` in the Firestore document mirror and API payload.
 
 ## Main rules implemented
 

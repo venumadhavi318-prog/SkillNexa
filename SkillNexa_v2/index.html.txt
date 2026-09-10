@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SkillNexa — AI Learning Platform</title>
+<link rel="stylesheet" href="./css/styles.css">
+</head>
+<body>
+<div id="toast" class="toast"></div>
+<div id="appShell">
+<header class="topbar"><div class="brand" onclick="location.reload()">SKILLNEXA</div><nav><button id="navDashboard">Dashboard</button><button id="navCourses">Courses</button><button id="navAI">AI Tutor</button><button id="navTest">Daily Test</button><button id="navAssignment">Assignments</button><button id="navProfile">Profile</button><button id="logout" class="danger">Logout</button></nav><div class="user-mini"><b id="userName">Student</b><span id="userBranch"></span></div></header>
+<aside class="side"><div class="side-stat"><span>⭐ Points</span><b id="points">0</b></div><div class="side-stat"><span>🏆 Level</span><b id="level">1</b></div></aside>
+<main>
+<section id="login" class="page active auth-page"><div class="auth-card"><div class="brand big">SKILLNEXA</div><h1>Learn. Practice. Grow.</h1><p>Branch-based courses, unlimited AI help, tests, assignments and certificates.</p><form id="loginForm"><input id="loginEmail" type="email" placeholder="Email" required><input id="loginPassword" type="password" placeholder="Password" required><button class="primary">Login</button></form><button id="toRegister" class="link-btn">Create a new account</button></div></section>
+<section id="register" class="page auth-page"><div class="auth-card"><div class="brand big">SKILLNEXA</div><h1>Create your account</h1><form id="registerForm"><input id="regName" placeholder="Full Name" required><input id="regEmail" type="email" placeholder="Email" required><input id="regPassword" type="password" placeholder="Password (6+ characters)" required><select id="registerEducation"><option>B.Tech</option><option>Degree</option><option>Diploma</option></select><select id="registerBranch"></select><button class="primary">Register</button></form><button id="toLogin" class="link-btn">Already have an account? Login</button></div></section>
+<section id="dashboard" class="page"><div id="dashboardContent"></div></section>
+<section id="courses" class="page"><div class="section-head"><div><p class="eyebrow">YOUR BRANCH</p><h1 id="coursesTitle">Courses</h1><p>Only courses relevant to your selected branch are shown.</p></div></div><div id="courseGrid" class="course-grid"></div></section>
+<section id="courseDetail" class="page"><div class="section-head"><div><p class="eyebrow" id="courseMeta"></p><h1 id="courseName"></h1><p>Basics → Intermediate → Advanced → Pro</p></div><button id="certificateBtn" class="primary" style="display:none">🎓 Certificate</button></div><div id="levelList" class="level-list"></div></section>
+<section id="lesson" class="page"><div class="section-head"><div><p class="eyebrow">STEP-BY-STEP MODULE</p><h1 id="lessonTitle"></h1></div></div><div id="lessonBody"></div></section>
+<section id="ai" class="page"><div class="section-head"><div><p class="eyebrow">UNLIMITED AI HELP</p><h1>🤖 NEXA AI Tutor</h1><p>Ask course doubts or current-information questions.</p></div></div><div class="controls"><select id="aiLanguage"><option>Auto</option><option>English</option><option>Telugu</option><option>Hindi</option><option>Tamil</option><option>Kannada</option><option>Malayalam</option><option>Marathi</option><option>Bengali</option><option>Gujarati</option><option>Punjabi</option><option>Urdu</option><option>Odia</option><option>Assamese</option></select><select id="aiVoice"><option>Female</option><option>Male</option><option>Sweet</option><option>Deep</option></select><label class="switch"><input id="voiceEnabled" type="checkbox"> 🔊 Speaker</label><button id="stopVoice" class="secondary">⏹ Stop</button></div><form id="aiForm" class="ai-form"><textarea id="aiInput" placeholder="Ask anything… e.g. Explain STAAD.Pro loads / Who is the present Prime Minister of India?" required></textarea><button class="primary">Ask NEXA</button></form><div id="aiAnswer" class="card answer-area">Your answer will appear here.</div></section>
+<section id="test" class="page"><div class="section-head"><div><p class="eyebrow">POINTS</p><h1>📝 Daily Test</h1></div></div><div id="testArea"></div></section>
+<section id="assignment" class="page"><div class="section-head"><div><p class="eyebrow">POINTS</p><h1>📚 Assignments</h1></div></div><div id="assignmentArea"></div></section>
+<section id="profile" class="page"><div class="section-head"><div><p class="eyebrow">PROFILE</p><h1>👤 Your Profile</h1></div></div><div id="profileArea"></div></section>
+<section id="certificate" class="page"><div id="certificateArea"></div></section>
+</main></div>
+<script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-analytics-compat.js"></script>
+<script src="./js/firebase.js"></script>
+<script type="module" src="./js/app.js"></script>
+</body></html>
