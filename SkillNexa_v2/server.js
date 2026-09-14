@@ -774,16 +774,16 @@ async function api(req, res, url) {
         watchedSeconds,
         watchedPercent,
         duration,
-        completed: watchedPercent >= 90,
+        completed: Boolean(b.ended),
         lastUpdatedAt: new Date().toISOString()
       };
 
       s.topicProgress ||= {};
       s.topicProgress[c.id] ||= {};
       const progress = s.topicProgress[c.id][key] || { started: true, viewed: true, learned: false, completed: false, courseId: c.id, level, topicTitle: title };
-      s.topicProgress[c.id][key] = { ...progress, started: true, viewed: true, learned: watchedPercent >= 90, completed: watchedPercent >= 90, courseId: c.id, level, topicTitle: title, completedAt: watchedPercent >= 90 ? new Date().toISOString() : progress.completedAt };
+      s.topicProgress[c.id][key] = { ...progress, started: true, viewed: true, learned: Boolean(b.ended), completed: Boolean(b.ended), courseId: c.id, level, topicTitle: title, completedAt: Boolean(b.ended) ? new Date().toISOString() : progress.completedAt };
 
-      if (watchedPercent >= 90) {
+      if (Boolean(b.ended)) {
         s.learnedTopics ||= [];
         const exists = s.learnedTopics.some(item => String(item.courseId || item.id) === c.id && String(item.topicTitle || item.title || item.topic || "") === title);
         if (!exists) s.learnedTopics.push({ courseId: c.id, level, topicTitle: title, learnedAt: new Date().toISOString(), isFree: level === 1 && (c.levels[0]?.topics || []).slice(0, 2).some(t => String(t.title).toLowerCase() === title.toLowerCase()) });
@@ -795,8 +795,8 @@ async function api(req, res, url) {
       s.courseProgress[c.id] = courseCompletionPercent(s, c);
 
       await writeStudents(students);
-      await syncStudentHistoryToFirebase(s.id, "topic_video_progress", { courseId: c.id, level, title, videoId, watchedPercent, watchedSeconds, duration, completed: watchedPercent >= 90, updatedAt: new Date().toISOString() });
-      return sendJSON(res, 200, { user: publicUser(s), video: s.videoProgress[c.id][key], topic: { courseId: c.id, level, topicTitle: title, completed: watchedPercent >= 90 }, message: watchedPercent >= 90 ? "✅ Video Completed" : "Video progress saved." });
+      await syncStudentHistoryToFirebase(s.id, "topic_video_progress", { courseId: c.id, level, title, videoId, watchedPercent, watchedSeconds, duration, completed: Boolean(b.ended), updatedAt: new Date().toISOString() });
+      return sendJSON(res, 200, { user: publicUser(s), video: s.videoProgress[c.id][key], topic: { courseId: c.id, level, topicTitle: title, completed: Boolean(b.ended) }, message: Boolean(b.ended) ? "✅ Video Completed" : "Video progress saved." });
     }
 
     if (req.method === "POST" && url.pathname === "/api/course/complete-level") {

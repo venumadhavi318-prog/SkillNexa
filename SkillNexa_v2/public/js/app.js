@@ -11,6 +11,7 @@ let ytPlayer = null;
 let ytModal = null;
 let ytProgress = null;
 let ytThrottle = false;
+let ytLessonContext = null;
 
 function page(id) { document.querySelectorAll(".page").forEach(x => x.classList.remove("active")); const p = document.getElementById(id); if (p) p.classList.add("active"); state.page=id; }
 function toast(msg) { const t = $("#toast"); t.textContent=msg; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),2800); }
@@ -145,6 +146,7 @@ function openYoutubeVideo(course, level, topicTitle, query){
   const title = String(topicTitle || query || "Topic");
   const levelInt = Number(level) || 1;
   const levelTopic = { courseId, level: levelInt, topicTitle: title, title };
+  ytLessonContext = { course, level: levelInt };
   openYoutubeVideoById(YOUTUBE_FALLBACK_ID, `${course?.name || "SkillNexa"} ${title} tutorial`, course, levelTopic);
 }
 function openYoutubeVideoById(videoId, query, course, levelTopic){
@@ -185,7 +187,7 @@ function openYoutubeVideoById(videoId, query, course, levelTopic){
             if (ev.data === YT.PlayerState.ENDED) {
               ytTrackProgress(course, levelTopic, query, safeVideoId, true);
             }
-            if (ev.data === YT.PlayerState.ENDED || ev.data === YT.PlayerState.ERROR) {
+            if (ev.data === YT.PlayerState.ERROR) {
               ytModal.querySelector("#youtubeVideoStatus").textContent = "Video unavailable";
             }
           },
@@ -206,36 +208,42 @@ function ytTrackProgress(course, levelTopic, query, videoId, forceEnd = false){
     const duration = Number(ytPlayer.getDuration() || 0);
     const watchedSeconds = Number(ytPlayer.getCurrentTime() || 0);
     const watchedPercent = duration > 0 ? Math.min(100, Math.round((watchedSeconds / duration) * 100)) : 0;
-    if (ytThrottle) return;
+    if (ytThrottle && !forceEnd) return;
     ytThrottle = true;
     setTimeout(() => { ytThrottle = false; }, 2000);
-    if (watchedPercent >= 90 || forceEnd) {
+    if (forceEnd) {
       ytProgress.completed = true;
-      ytProgress.watchedPercent = watchedPercent;
-      ytProgress.watchedSeconds = watchedSeconds;
+      ytProgress.watchedPercent = 100;
+      ytProgress.watchedSeconds = duration;
       ytProgress.duration = duration;
-      const payload = {
-        courseId: course.id,
-        level: Number(levelTopic.level || 1),
-        topicTitle: levelTopic.topicTitle || levelTopic.title || String(query || "SkillNexa topic"),
-        videoId,
-        watchedSeconds,
-        duration,
-        watchedPercent: Math.max(90, watchedPercent)
-      };
-      api("/api/topic/video-progress", { method: "POST", body: JSON.stringify(payload) })
-        .then((d) => {
-          if (d?.topic?.completed) {
-            ytModal.querySelector("#youtubeVideoStatus").textContent = "✅ Video Completed";
-            toast("✅ Video Completed");
-          } else {
-            ytModal.querySelector("#youtubeVideoStatus").textContent = "Video progress saved";
-          }
-        })
-        .catch((e) => {
-          ytModal.querySelector("#youtubeVideoStatus").textContent = "Video unavailable";
-        });
     }
+    const payload = {
+      courseId: course.id,
+      level: Number(levelTopic.level || 1),
+      topicTitle: levelTopic.topicTitle || levelTopic.title || String(query || "SkillNexa topic"),
+      videoId,
+      watchedSeconds: forceEnd ? duration : watchedSeconds,
+      duration,
+      watchedPercent: forceEnd ? 100 : watchedPercent,
+      ended: forceEnd
+    };
+    api("/api/topic/video-progress", { method: "POST", body: JSON.stringify(payload) })
+      .then((d) => {
+        if (d?.topic?.completed) {
+          ytModal.querySelector("#youtubeVideoStatus").textContent = "✅ Video Completed";
+          toast("✅ Video Completed");
+          user = d.user;
+          refresh();
+          if (ytLessonContext) {
+            openLesson(ytLessonContext.course, ytLessonContext.level);
+          }
+        } else {
+          ytModal.querySelector("#youtubeVideoStatus").textContent = "Video progress saved";
+        }
+      })
+      .catch((e) => {
+        ytModal.querySelector("#youtubeVideoStatus").textContent = "Video unavailable";
+      });
   } catch (e) {
     ytModal.querySelector("#youtubeVideoStatus").textContent = "Video unavailable";
   }
@@ -291,7 +299,6 @@ function openLesson(c,n){
       <div class="lesson-links">
         <button class="secondary" data-youtube="${esc(c.name + " " + title + " tutorial")}" data-course="${esc(c.id)}" data-level="${n}" data-topic="${esc(title)}">🎥 YouTube</button>
         <button class="secondary" data-speak="${esc(`Learn ${title} in ${c.name}.`)}">🔊 Listen</button>
-        <button class="primary mark-topic-btn" data-topic-title="${esc(title)}">Mark as Completed</button>
       </div>
     </article>`;
   };
@@ -309,35 +316,11 @@ function openLesson(c,n){
       $(".lesson-document-content").innerHTML = renderConcept(l.topics[idx], idx);
       document.querySelectorAll("[data-speak]").forEach(s => s.onclick = () => speak(s.dataset.speak, $("#aiLanguage").value, $("#aiVoice").value));
       document.querySelectorAll("[data-youtube]").forEach(y => y.onclick = () => openYoutubeVideo(c, n, y.dataset.topic || y.dataset.youtube, y.dataset.youtube));
-      document.querySelectorAll(".mark-topic-btn").forEach(btn => btn.onclick = async () => {
-        try {
-          const d = await api("/api/topic/complete", { method: "POST", body: JSON.stringify({ courseId: c.id, level: n, topicTitle: btn.dataset.topicTitle }) });
-          user = d.user;
-          refresh();
-          renderCourse(c, { completed: [], unlocked: c.levels.map((_, i) => i === 0 || (user.completedLevels?.[c.id] || []).includes(i)), courseId: c.id });
-          toast(d.message || "Topic marked completed.");
-          openLesson(c, n);
-        } catch (e) {
-          toast(e.message);
-        }
-      });
     };
   });
 
   document.querySelectorAll("[data-speak]").forEach(b => b.onclick = () => speak(b.dataset.speak, $("#aiLanguage").value, $("#aiVoice").value));
   document.querySelectorAll("[data-youtube]").forEach(y => y.onclick = () => openYoutubeVideo(c, n, y.dataset.topic || y.dataset.youtube, y.dataset.youtube));
-  document.querySelectorAll(".mark-topic-btn").forEach(btn => btn.onclick = async () => {
-    try {
-      const d = await api("/api/topic/complete", { method: "POST", body: JSON.stringify({ courseId: c.id, level: n, topicTitle: btn.dataset.topicTitle }) });
-      user = d.user;
-      refresh();
-      toast(d.message || "Topic marked completed.");
-      renderCourse(c, { completed: user.completedLevels?.[c.id] || [], unlocked: c.levels.map((_, i) => i === 0 || (user.completedLevels?.[c.id] || []).includes(i)), courseId: c.id });
-      openLesson(c, n);
-    } catch (e) {
-      toast(e.message);
-    }
-  });
 }
 async function showAI(){ page("ai"); if(!user.selectedCourse) toast("Select a course first for better AI context."); }
 async function askAI(e){ e.preventDefault(); const q=$("#aiInput").value.trim(); if(!q)return; $("#aiAnswer").innerHTML=`<div class="typing">NEXA is thinking…</div>`; try{const d=await api("/api/ai",{method:"POST",body:JSON.stringify({question:q})}); $("#aiAnswer").innerHTML=`<div class="answer">${esc(d.answer).replace(/\n/g,"<br>")}${d.liveSource?`<p><a target="_blank" href="${esc(d.liveUrl)}">Verified source: ${esc(d.liveSource)}</a></p>`:""}</div>`; if($("#voiceEnabled").checked)speak(d.answer,$("#aiLanguage").value,$("#aiVoice").value); }catch(e){toast(e.message);} }
