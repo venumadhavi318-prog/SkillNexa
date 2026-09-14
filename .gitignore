@@ -1,2 +1,10 @@
 node_modules/
 .env
+.env.local
+.env.production
+firebase-service-account.json
+*.log
+*.pem
+*.key
+.DS_Store
+

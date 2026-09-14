@@ -525,6 +525,7 @@ function publicUser(s) {
     topicProgress: s.topicProgress || {},
     lessonProgress: s.lessonProgress || {},
     courseProgress: s.courseProgress || {},
+    videoProgress: s.videoProgress || {},
     completedLevels: s.completedLevels || {},
     completedCourses: s.completedCourses || [],
     createdAt: s.createdAt
@@ -564,6 +565,7 @@ function ensureStudentFields(s) {
   s.topicProgress ||= {};
   s.lessonProgress ||= {};
   s.courseProgress ||= {};
+  s.videoProgress ||= {};
   s.assignmentHistory ||= [];
   s.assignmentAttempts ||= {};
   s.assignmentQuestionHistory ||= [];
@@ -577,6 +579,24 @@ function ensureStudentFields(s) {
 }
 
 function topicTitleOf(item) { return String(item?.topicTitle || item?.title || item?.topic || "").trim(); }
+
+// Friendly selector names -> native-language hint used in AI prompts. The model
+// responds far more reliably in the target language when given its native name.
+const LANG_NATIVE = {
+  English: "English",
+  Telugu: "Telugu (తెలుగు)",
+  Hindi: "Hindi (हिन्दी)",
+  Tamil: "Tamil (தமிழ்)",
+  Kannada: "Kannada (ಕನ್ನಡ)",
+  Malayalam: "Malayalam (മലയാളം)",
+  Marathi: "Marathi (मराठी)",
+  Bengali: "Bengali (বাংলা)",
+  Gujarati: "Gujarati (ગુજરાતી)",
+  Punjabi: "Punjabi (ਪੰਜਾਬੀ)",
+  Urdu: "Urdu (اردو)",
+  Odia: "Odia (ଓଡ଼ିଆ)",
+  Assamese: "Assamese (অসমীয়া)"
+};
 function topicCourseOf(item) { return String(item?.courseId || item?.course || "").trim(); }
 function parseAIJson(text) {
   const cleaned = String(text || "").replace(/```json|```/gi, "").trim();
@@ -938,35 +958,43 @@ async function api(req, res, url) {
       const s = students.find(x => x.id === user.id);
       ensureStudentFields(s);
       const key = `${c.id}:${level}:${title}`;
-      const watchedPercent = Number(b.watchedPercent || b.progress || 0);
-      const watchedSeconds = Number(b.watchedSeconds || 0);
-      const duration = Number(b.duration || 0);
+      const watchedPercent = Math.min(100, Math.max(0, Number(b.watchedPercent || b.progress || 0)));
+      const watchedSeconds = Math.max(0, Number(b.watchedSeconds || 0));
+      const duration = Math.max(0, Number(b.duration || 0));
       const videoId = String(b.videoId || "");
+
       s.videoProgress ||= {};
       s.videoProgress[c.id] ||= {};
+      const prevVideo = s.videoProgress[c.id][key] || {};
+      // Only ever move forward: never let a revisit lower the saved percentage/time.
+      const finalPercent = Math.max(Number(prevVideo.watchedPercent || 0), watchedPercent);
+      const finalSeconds = Math.max(Number(prevVideo.watchedSeconds || 0), watchedSeconds);
+      const completed = Boolean(prevVideo.completed) || finalPercent >= 100;
+      const now = new Date().toISOString();
       s.videoProgress[c.id][key] = {
         courseId: c.id,
         level,
         topicTitle: title,
         videoId,
-        watchedSeconds,
-        watchedPercent,
-        duration,
-        completed: watchedPercent >= 90,
-        lastUpdatedAt: new Date().toISOString()
+        watchedSeconds: finalSeconds,
+        watchedPercent: finalPercent,
+        duration: Math.max(Number(prevVideo.duration || 0), duration),
+        completed,
+        completedAt: prevVideo.completedAt || (completed ? now : null),
+        lastUpdatedAt: now
       };
 
       s.topicProgress ||= {};
       s.topicProgress[c.id] ||= {};
       const progress = s.topicProgress[c.id][key] || { started: true, viewed: true, learned: false, completed: false, courseId: c.id, level, topicTitle: title };
-      s.topicProgress[c.id][key] = { ...progress, started: true, viewed: true, learned: watchedPercent >= 90, completed: watchedPercent >= 90, courseId: c.id, level, topicTitle: title, completedAt: watchedPercent >= 90 ? new Date().toISOString() : progress.completedAt };
+      s.topicProgress[c.id][key] = { ...progress, started: true, viewed: true, learned: progress.learned === true || completed, completed: progress.completed === true || completed, watchPercent: finalPercent, courseId: c.id, level, topicTitle: title, completedAt: progress.completedAt || (completed ? now : null) };
 
-      if (watchedPercent >= 90) {
+      if (completed) {
         s.learnedTopics ||= [];
         const exists = s.learnedTopics.some(item => String(item.courseId || item.id) === c.id && String(item.topicTitle || item.title || item.topic || "") === title);
-        if (!exists) s.learnedTopics.push({ courseId: c.id, level, topicTitle: title, learnedAt: new Date().toISOString(), isFree: level === 1 && (c.levels[0]?.topics || []).slice(0, 2).some(t => String(t.title).toLowerCase() === title.toLowerCase()) });
+        if (!exists) s.learnedTopics.push({ courseId: c.id, level, topicTitle: title, learnedAt: now, isFree: level === 1 && (c.levels[0]?.topics || []).slice(0, 2).some(t => String(t.title).toLowerCase() === title.toLowerCase()) });
         s.lessonProgress ||= {};
-        s.lessonProgress[key] = { viewed: true, completed: true, started: true, courseId: c.id, level, topicTitle: title, learnedAt: new Date().toISOString() };
+        s.lessonProgress[key] = { viewed: true, completed: true, started: true, courseId: c.id, level, topicTitle: title, learnedAt: now };
       }
 
       s.courseProgress ||= {};
@@ -977,17 +1005,29 @@ async function api(req, res, url) {
         const historyItem = {
           courseId: c.id, courseName: c.name, level, topicTitle: title, videoId,
           videoTitle: String(b.videoTitle || "YouTube Lesson"), channelTitle: String(b.channelTitle || ""),
-          thumbnail: String(b.thumbnail || ""), watchedPercent, watchedSeconds, duration,
-          completed: watchedPercent >= 90, completedAt: new Date().toISOString()
+          thumbnail: String(b.thumbnail || ""), watchedPercent: finalPercent, watchedSeconds: finalSeconds, duration,
+          completed, completedAt: completed ? (prevVideo.completedAt || now) : null,
+          lastWatchedAt: now
         };
         const existing = s.watchHistory.findIndex(v => v.videoId === videoId && String(v.courseId) === c.id && Number(v.level) === level && String(v.topicTitle) === title);
-        if (existing >= 0) s.watchHistory[existing] = { ...s.watchHistory[existing], ...historyItem };
-        else s.watchHistory.push(historyItem);
+        if (existing >= 0) {
+          const old = s.watchHistory[existing] || {};
+          s.watchHistory[existing] = {
+            ...old,
+            ...historyItem,
+            watchedPercent: Math.max(Number(old.watchedPercent || 0), finalPercent),
+            watchedSeconds: Math.max(Number(old.watchedSeconds || 0), finalSeconds),
+            completed: Boolean(old.completed) || completed,
+            completedAt: Boolean(old.completed) ? (old.completedAt || now) : (completed ? now : null)
+          };
+        } else {
+          s.watchHistory.push(historyItem);
+        }
       }
 
       await writeStudents(students);
-      await syncStudentHistoryToFirebase(s.id, "topic_video_progress", { courseId: c.id, level, title, videoId, watchedPercent, watchedSeconds, duration, completed: watchedPercent >= 90, updatedAt: new Date().toISOString() });
-      return sendJSON(res, 200, { user: publicUser(s), video: s.videoProgress[c.id][key], topic: { courseId: c.id, level, topicTitle: title, completed: watchedPercent >= 90 }, message: watchedPercent >= 90 ? "✅ Video Completed" : "Video progress saved." });
+      await syncStudentHistoryToFirebase(s.id, "topic_video_progress", { courseId: c.id, level, title, videoId, watchedPercent: finalPercent, watchedSeconds: finalSeconds, duration, completed, updatedAt: now });
+      return sendJSON(res, 200, { user: publicUser(s), video: s.videoProgress[c.id][key], topic: { courseId: c.id, level, topicTitle: title, completed, watchedPercent: finalPercent }, message: completed ? "✅ Topic Completed" : "Video progress saved." });
     }
 
     if (req.method === "POST" && url.pathname === "/api/course/complete-level") {
@@ -1066,12 +1106,15 @@ async function api(req, res, url) {
         answer = `${live.answer}\n\nSource: ${live.source}`;
         if (requestedLanguage && requestedLanguage !== "Auto" && requestedLanguage !== "English" && OPENAI_API_KEY) {
           try {
-            answer = await openai(`Translate the following verified answer into ${requestedLanguage}. Preserve all facts, names, numbers, URLs, and the source line exactly. Return only the translated answer.\n\n${answer}`);
+            answer = await openai(`Translate the following verified answer into ${requestedLanguage} (${LANG_NATIVE[requestedLanguage] || requestedLanguage}). Preserve all facts, names, numbers, URLs, and the source line exactly. Return only the translated answer.\n\n${answer}`);
           } catch {}
         }
       } else {
         try {
-          const languageInstruction = requestedLanguage && requestedLanguage !== "Auto" ? `Reply ONLY in ${requestedLanguage}. Do not switch to English unless ${requestedLanguage} is English.` : "Detect the student's language and reply in that language.";
+          const langName = LANG_NATIVE[requestedLanguage] || requestedLanguage;
+          const languageInstruction = requestedLanguage && requestedLanguage !== "Auto"
+            ? `Reply ONLY in ${requestedLanguage} (${langName}). Write the entire answer in that language. Do NOT switch to English or use any other language.`
+            : "Detect the student's language from the question and reply in that language. If the question is in English, reply in English.";
           answer = await openai(`You are NEXA, the SkillNexa AI Tutor. Student education: ${context.education}. Branch: ${context.branch}. Selected course: ${context.selectedCourse}. Current level: ${context.currentLevel}. Current topic: ${context.currentTopic}. Completed topics: ${context.completedTopics.map(String).join(", ") || "None"}. Learned topics: ${context.learnedTopics.map(t => topicTitleOf(t)).join(", ") || "None"}. Lesson progress: ${JSON.stringify(context.lessonProgress)}. ${languageInstruction} Answer clearly and step-by-step. Do not invent current facts. If the question asks for current/present/latest information and no verified source is available, say that verification is unavailable instead of guessing. Do not automatically mark any topic as learned. Question: ${question}`);
         } catch (e) {
           answer = `I couldn't reach OpenAI right now.\n\n${e.message}\n\nYou can still use the course lessons and YouTube resources below.`;

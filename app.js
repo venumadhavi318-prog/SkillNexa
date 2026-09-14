@@ -1,16 +1,112 @@
 import { api, setToken, getToken } from "./api.js";
 import { educationBranches, levelInfo } from "./data.js";
 import { loadCourses, branchCourses, selectCourse, currentCourse, completeLevel, youtubeUrl } from "./courses.js";
-import { speak, stopVoice, setVoiceEnabled, waitForVoices } from "./voice.js";
+import { speak, stopVoice, setVoiceEnabled, setVoiceStyle, setSpeechLanguage, waitForVoices } from "./voice.js";
 
 const $ = s => document.querySelector(s); const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]));
 let user = null; let testId = null; let testQuestions = []; let assignmentId = null;
-const state = { page:"login", aiLanguage:"Auto", aiVoice:"Female" };
+const state = { page:"login", aiLanguage:"Auto", aiVoice:"Female Sweet" };
 
-function page(id) { document.querySelectorAll(".page").forEach(x => x.classList.remove("active")); const p = document.getElementById(id); if (p) p.classList.add("active"); state.page=id; }
+function page(id) { if (id !== "lesson") stopWatchTracker(); document.querySelectorAll(".page").forEach(x => x.classList.remove("active")); const p = document.getElementById(id); if (p) p.classList.add("active"); state.page=id; }
 function toast(msg) { const t = $("#toast"); t.textContent=msg; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),2800); }
 function level(points) { let l=1; levelInfo.forEach(x=>{ if(points>=x.points) l=x.level; }); return l; }
 function nextLevel(points) { const l=level(points); return levelInfo[l] || null; }
+
+// Automatic topic-video completion tracking.
+// There is no embedded player in this app (the YouTube button opens a search
+// tab), so "watching" the topic lesson is measured by active on-page time.
+// A topic is only marked Completed once the accumulated active watch reaches
+// 100% of the target lesson duration.  Every topic keeps its own keyed record.
+const TOPIC_WATCH_SECONDS = 120; // active seconds required to fully watch a topic lesson
+let watchTimer = null;
+let watchState = null;
+
+function stopWatchTracker() {
+  if (watchTimer) { clearInterval(watchTimer); watchTimer = null; }
+  if (watchState) { flushWatchProgress(watchState); watchState = null; }
+}
+
+function startWatchTracker(c, level, topicTitle) {
+  stopWatchTracker();
+  const key = topicCompletionKey(c.id, level, topicTitle);
+  const saved = user?.videoProgress?.[c.id]?.[key] || {};
+  const status = topicStatus(c.id, level, topicTitle);
+  const area = document.querySelector(`.lesson-document-completion-area[data-topic-key="${key}"]`);
+  if (!area) return;
+  if (status === "Completed") {
+    area.innerHTML = '<span class="topic-completion-badge">✓ Completed</span>';
+    return;
+  }
+  area.innerHTML = "";
+  watchState = { courseId: c.id, level, topicTitle, key, savedPercent: Number(saved.watchedPercent || 0), savedSeconds: Number(saved.watchedSeconds || 0), duration: Number(saved.duration || TOPIC_WATCH_SECONDS), visibleSince: document.visibilityState === "visible" ? Date.now() : 0, lastSavedAt: Date.now() };
+  watchTimer = setInterval(tickWatchTracker, 1500);
+}
+
+function updateWatchButton(percent, completed) {
+  if (!watchState) return;
+  const area = document.querySelector(`.lesson-document-completion-area[data-topic-key="${watchState.key}"]`);
+  if (!area) return;
+  if (completed) {
+    area.innerHTML = '<span class="topic-completion-badge">✓ Completed</span>';
+    area.classList.add("watch-complete");
+  } else {
+    area.classList.remove("watch-complete");
+  }
+}
+
+function tickWatchTracker() {
+  if (!watchState) return;
+  if (document.visibilityState !== "visible") { watchState.visibleSince = 0; return; }
+  const now = Date.now();
+  if (!watchState.visibleSince) watchState.visibleSince = now;
+  const activeSeconds = watchState.savedSeconds + Math.round((now - watchState.visibleSince) / 1000);
+  const percent = Math.min(100, Math.round((activeSeconds / Math.max(1, watchState.duration)) * 100));
+  updateWatchButton(percent, false);
+  if (now - watchState.lastSavedAt >= 3000 || percent >= 100) {
+    saveWatchProgress(percent, activeSeconds);
+    watchState.lastSavedAt = now;
+  }
+}
+
+async function saveWatchProgress(percent, activeSeconds) {
+  const ws = watchState;
+  if (!ws) return;
+  const payload = { courseId: ws.courseId, level: ws.level, topicTitle: ws.topicTitle, watchedPercent: percent, watchedSeconds: activeSeconds, duration: ws.duration, videoId: ws.key, videoTitle: `${ws.topicTitle} lesson` };
+  try {
+    const d = await api("/api/topic/video-progress", { method: "POST", body: JSON.stringify(payload) });
+    if (!watchState || watchState.key !== ws.key) return;
+    const completed = Boolean(d.topic?.completed);
+    if (completed) {
+      stopWatchTracker();
+      updateTopicStatusLabels(ws.courseId, ws.level, ws.topicTitle, "Completed");
+      refresh();
+      toast("Topic completed! Daily Test unlocked.");
+    }
+  } catch (e) { /* network hiccup - progress is re-flushed on the next tick */ }
+}
+
+function flushWatchProgress(ws) {
+  if (!ws || document.visibilityState !== "visible") return;
+  const now = Date.now();
+  const since = ws.visibleSince || now;
+  const activeSeconds = ws.savedSeconds + Math.round((now - since) / 1000);
+  const percent = Math.min(100, Math.round((activeSeconds / Math.max(1, ws.duration)) * 100));
+  if (activeSeconds > ws.savedSeconds) {
+    api("/api/topic/video-progress", { method: "POST", keepalive: true, body: JSON.stringify({ courseId: ws.courseId, level: ws.level, topicTitle: ws.topicTitle, watchedPercent: percent, watchedSeconds: activeSeconds, duration: ws.duration, videoId: ws.key, videoTitle: `${ws.topicTitle} lesson` }) }).catch(() => {});
+  }
+}
+
+function updateTopicStatusLabels(courseId, level, topicTitle, status) {
+  const area = document.querySelector(`.lesson-document-completion-area[data-topic-key="${topicCompletionKey(courseId, level, topicTitle)}"]`);
+  if (area) {
+    if (status === "Completed") area.innerHTML = '<span class="topic-completion-badge">✓ Completed</span>';
+    else area.innerHTML = "";
+  }
+  const activeBtn = document.querySelector(".lesson-topic-button.active .topic-status-mini");
+  if (activeBtn) activeBtn.textContent = status;
+}
+
+window.addEventListener("pagehide", () => { if (watchState) { flushWatchProgress(watchState); } });
 
 async function boot() {
   // Bind the authentication controls first. Do not let optional API/course
@@ -34,6 +130,7 @@ async function boot() {
       page("login");
     }
   } else {
+    $("#appShell").classList.add("ready");
     page("login");
   }
 }
@@ -51,6 +148,8 @@ function bind() {
   const toRegister = $("#toRegister");
   const toLogin = $("#toLogin");
   const aiForm = $("#aiForm");
+  const aiVoice = $("#aiVoice");
+  const aiLanguage = $("#aiLanguage");
   const stopVoiceBtn = $("#stopVoice");
   const voiceEnabled = $("#voiceEnabled");
 
@@ -69,6 +168,8 @@ function bind() {
   if (aiForm) aiForm.addEventListener("submit", askAI);
   if (stopVoiceBtn) stopVoiceBtn.onclick=stopVoice;
   if (voiceEnabled) voiceEnabled.onchange=e=>setVoiceEnabled(e.target.checked);
+  if (aiVoice) aiVoice.onchange=e=>{ state.aiVoice=e.target.value; setVoiceStyle(e.target.value); };
+  if (aiLanguage) aiLanguage.onchange=e=>{ state.aiLanguage=e.target.value; setSpeechLanguage(e.target.value); };
 }
 function renderBranches() {
   const education = $("#registerEducation");
@@ -141,12 +242,11 @@ function openLesson(c,n){
     const explanation = topic?.explanation || `Explanation for ${title}.`;
     const example = topic?.example || `Example for ${title}.`;
     const status = topicStatus(c.id, n, title);
-    const statusClass = status.toLowerCase().replace(/\s+/g, '-');
+    const done = status === "Completed";
     return `<article class="lesson-document-card">
       <div class="lesson-document-head">
         <span class="lesson-document-tag">Course Document</span>
         <h3>${esc(title)}</h3>
-        <span class="topic-status ${statusClass}">${status}</span>
       </div>
       <div class="lesson-doc-aligned">
         <section class="lesson-doc-section">
@@ -165,8 +265,8 @@ function openLesson(c,n){
       <div class="lesson-links">
         <button class="secondary" data-youtube="${esc(c.name + " " + title + " tutorial")}">🎥 YouTube</button>
         <button class="secondary" data-speak="${esc(`Learn ${title} in ${c.name}.`)}">🔊 Listen</button>
-        <button class="primary mark-topic-btn" data-topic-title="${esc(title)}">Mark as Completed</button>
       </div>
+      <div class="lesson-document-completion-area" data-topic-key="${esc(topicCompletionKey(c.id, n, title))}">${done ? '<span class="topic-completion-badge">✓ Completed</span>' : ''}</div>
     </article>`;
   };
 
@@ -183,40 +283,18 @@ function openLesson(c,n){
       $(".lesson-document-content").innerHTML = renderConcept(l.topics[idx], idx);
       document.querySelectorAll("[data-speak]").forEach(s => s.onclick = () => speak(s.dataset.speak, $("#aiLanguage").value, $("#aiVoice").value));
       document.querySelectorAll("[data-youtube]").forEach(y => y.onclick = () => openYoutubeSearch(y.dataset.youtube));
-      document.querySelectorAll(".mark-topic-btn").forEach(btn => btn.onclick = async () => {
-        try {
-          const d = await api("/api/topic/complete", { method: "POST", body: JSON.stringify({ courseId: c.id, level: n, topicTitle: btn.dataset.topicTitle }) });
-          user = d.user;
-          refresh();
-          renderCourse(c, { completed: [], unlocked: c.levels.map((_, i) => i === 0 || (user.completedLevels?.[c.id] || []).includes(i)), courseId: c.id });
-          toast(d.message || "Topic marked completed.");
-          openLesson(c, n);
-        } catch (e) {
-          toast(e.message);
-        }
-      });
+      startWatchTracker(c, n, l.topics[idx].title);
     };
   });
 
   document.querySelectorAll("[data-speak]").forEach(b => b.onclick = () => speak(b.dataset.speak, $("#aiLanguage").value, $("#aiVoice").value));
   document.querySelectorAll("[data-youtube]").forEach(y => y.onclick = () => openYoutubeSearch(y.dataset.youtube));
-  document.querySelectorAll(".mark-topic-btn").forEach(btn => btn.onclick = async () => {
-    try {
-      const d = await api("/api/topic/complete", { method: "POST", body: JSON.stringify({ courseId: c.id, level: n, topicTitle: btn.dataset.topicTitle }) });
-      user = d.user;
-      refresh();
-      toast(d.message || "Topic marked completed.");
-      renderCourse(c, { completed: user.completedLevels?.[c.id] || [], unlocked: c.levels.map((_, i) => i === 0 || (user.completedLevels?.[c.id] || []).includes(i)), courseId: c.id });
-      openLesson(c, n);
-    } catch (e) {
-      toast(e.message);
-    }
-  });
+  startWatchTracker(c, n, l.topics[0].title);
 }
 async function showAI(){ page("ai"); if(!user.selectedCourse) toast("Select a course first for better AI context."); }
-async function askAI(e){ e.preventDefault(); const q=$("#aiInput").value.trim(); if(!q)return; $("#aiAnswer").innerHTML=`<div class="typing">NEXA is thinking…</div>`; try{const d=await api("/api/ai",{method:"POST",body:JSON.stringify({question:q})}); $("#aiAnswer").innerHTML=`<div class="answer">${esc(d.answer).replace(/\n/g,"<br>")}${d.liveSource?`<p><a target="_blank" href="${esc(d.liveUrl)}">Verified source: ${esc(d.liveSource)}</a></p>`:""}</div>`; if($("#voiceEnabled").checked)speak(d.answer,$("#aiLanguage").value,$("#aiVoice").value); }catch(e){toast(e.message);} }
+async function askAI(e){ e.preventDefault(); const q=$("#aiInput").value.trim(); if(!q)return; $("#aiAnswer").innerHTML=`<div class="typing">NEXA is thinking…</div>`; try{const d=await api("/api/ai",{method:"POST",body:JSON.stringify({question:q,language:($("#aiLanguage").value||"Auto")})}); $("#aiAnswer").innerHTML=`<div class="answer">${esc(d.answer).replace(/\n/g,"<br>")}${d.liveSource?`<p><a target="_blank" href="${esc(d.liveUrl)}">Verified source: ${esc(d.liveSource)}</a></p>`:""}</div>`; speak(d.answer,$("#aiLanguage").value,$("#aiVoice").value); }catch(e){toast(e.message);} }
 async function showTest(){ page("test"); $("#testArea").innerHTML=`<div class="card"><h2>Daily Test</h2><p>10 questions • 100 marks • earn 10 points for every correct answer.</p><button class="primary" id="startTestInner">Start Personalized Test</button></div>`; $("#startTestInner").onclick=startTest; }
-async function startTest(){ try{const d=await api("/api/test/generate",{method:"POST",body:"{}"}); testId=d.testId; testQuestions=d.questions; $("#testArea").innerHTML=testQuestions.map((q,i)=>`<div class="card question"><b>${i+1}. ${esc(q.question)}</b>${q.options.map((o,j)=>`<label><input type="radio" name="q${i}" value="${j}"> ${esc(o)}</label>`).join("")}</div>`).join("")+`<button class="primary" id="submitTestInner">Submit Test</button>`; $("#submitTestInner").onclick=submitTest;}catch(e){toast(e.message);} }
+async function startTest(){ try{const d=await api("/api/test/generate",{method:"POST",body:"{}"}); testId=d.testId; testQuestions=d.questions; $("#testArea").innerHTML=testQuestions.map((q,i)=>`<div class="card question"><b>${i+1}. ${esc(q.question)}</b>${q.options.map((o,j)=>`<label><input type="radio" name="q${i}" value="${j}">${esc(o)}</label>`).join("")}</div>`).join("")+`<button class="primary" id="submitTestInner">Submit Test</button>`; $("#submitTestInner").onclick=submitTest;}catch(e){toast(e.message);} }
 async function submitTest(){ if(!testId)return; const answers=testQuestions.map((_,i)=>Number(document.querySelector(`input[name="q${i}"]:checked`)?.value ?? -1)); try{const d=await api("/api/test/submit",{method:"POST",body:JSON.stringify({testId,answers})}); await refresh(); $("#testArea").innerHTML=`<div class="result"><h2>🎉 Test Complete</h2><p>Score: <b>${d.score}/100</b></p><p>Points earned: <b>+${d.points}</b></p><p>Total points: <b>${d.totalPoints}</b></p><p>Current level: <b>${d.level}</b></p></div>`; testId=null;}catch(e){toast(e.message);} }
 async function showAssignment(){ page("assignment"); $("#assignmentArea").innerHTML=`<div class="card"><h2>Assignment</h2><p>Complete a practical task from your selected course. A successful submission gives <b>50 points</b>.</p><button class="primary" id="startAssignmentInner">Start Assignment</button></div>`; $("#startAssignmentInner").onclick=startAssignment; }
 async function startAssignment(){try{const d=await api("/api/assignment/start",{method:"POST",body:"{}"});assignmentId=d.task.id;$("#assignmentArea").innerHTML=`<div class="card"><h2>${esc(d.task.title)}</h2><p>${esc(d.task.prompt)}</p><textarea id="assignmentAnswer" placeholder="Write your solution, steps, explanation or code here..."></textarea><button class="primary" id="submitAssignmentInner">Submit +50 Points</button></div>`;$("#submitAssignmentInner").onclick=submitAssignment;}catch(e){toast(e.message);}}
