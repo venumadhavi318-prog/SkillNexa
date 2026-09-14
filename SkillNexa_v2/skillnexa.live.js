@@ -40,7 +40,7 @@ async function selectCourse(courseId) { return api("/api/course/select", { metho
 async function currentCourse() { return api("/api/course/current"); }
 async function completeLevel(courseId, level) { return api("/api/course/complete-level", { method:"POST", body:JSON.stringify({ courseId, level }) }); }
 
-const LANGS = { Auto:"en-IN", English:"en-IN", Telugu:"te-IN", Hindi:"hi-IN", Tamil:"ta-IN", Kannada:"kn-IN", Malayalam:"ml-IN", Marathi:"mr-IN", Bengali:"bn-IN", Gujarati:"gu-IN", Punjabi:"pa-IN", Urdu:"ur-IN", Odia:"or-IN", Assamese:"as-IN" };
+const LANGS = { Auto:"en-IN", English:"en-IN", Telugu:"te-IN", Hindi:"hi-IN", Tamil:"ta-IN", Kannada:"kn-IN", Malayalam:"ml-IN", Marathi:"mr-IN", Bengali:"bn-IN", Gujarati:"gu-IN", Punjabi:"pa-IN"};
 let enabled = false;
 let current = null;
 function setVoiceEnabled(v) { enabled = Boolean(v); if (!enabled) stopVoice(); return enabled; }
@@ -55,13 +55,13 @@ function speak(text, language = "Auto", style = "Female") {
   if (style === "Sweet") { u.rate = 0.9; u.pitch = 1.15; } else if (style === "Deep") { u.rate = 0.85; u.pitch = 0.7; } else { u.rate = 0.98; u.pitch = 1; }
   u.onend = () => { current = null; }; current = u; window.speechSynthesis.speak(u); return true;
 }
-function waitForVoices() { return new Promise(resolve => { if (!("speechSynthesis" in window)) return resolve([]); const v = speechSynthesis.getVoices(); if (v.length) return resolve(v); speechSynthesis.onvoiceschanged = () => resolve(speechSynthesis.getVoices()); setTimeout(() => resolve(speechSynthesis.getVoices()), 800); }); }
+function waitForVoices() { return new Promise(resolve => { if (!("speechSynthesis" in window)) return resolve([]); const v = speechSynthesis.getVoices(); if (v.length) return resolve(v); speechSynthesis.onvoiceschanged = () => resolve(speechSynthesis.getVoices()); }); }
 
 const firebaseConfig = {
   apiKey: "AIzaSyAiKTPs5eS8_kbsOZsAMOokrcWT80Jugg4",
   authDomain: "skill-nexa-25a33.firebaseapp.com",
   projectId: "skill-nexa-25a33",
-  storageBucket: "skill-nexa-25a33.firebasestorage.app",
+  storageBucket: "skill-nexa-25a33.appspot.com",
   messagingSenderId: "725930827337",
   appId: "1:725930827337:web:162ae9c4c7971621cde998",
   measurementId: "G-B5QQ9Q224P"
@@ -91,6 +91,7 @@ let testId = null;
 let testQuestions = [];
 let assignmentId = null;
 const state = { page:"login", aiLanguage:"Auto", aiVoice:"Female" };
+let currentVideoPlayer = null;
 
 function page(id) { document.querySelectorAll(".page").forEach(x => x.classList.remove("active")); const p = document.getElementById(id); if (p) p.classList.add("active"); state.page=id; }
 function toast(msg) { const t = $("#toast"); t.textContent=msg; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),2800); }
@@ -140,9 +141,9 @@ function renderBranches() {
   branch.innerHTML = `<option value="">Select Branch</option>` + branches.map(b => `<option value="${esc(b)}">${esc(b)}</option>`).join("");
 }
 
-async function login(e){ e.preventDefault(); try { const d=await api("/api/auth/login",{method:"POST",body:JSON.stringify({email:$("#loginEmail").value,password:$("#loginPassword").value})}); setToken(d.token); user=d.user; renderApp(); toast("Welcome to SkillNexa!"); } catch(err){toast(err.message);} }
-async function register(e){ e.preventDefault(); try { const d=await api("/api/auth/register",{method:"POST",body:JSON.stringify({name:$("#regName").value,email:$("#regEmail").value,password:$("#regPassword").value,education:$("#registerEducation").value,branch:$("#registerBranch").value})}); setToken(d.token); user=d.user; renderApp(); toast("Account created!"); } catch(err){toast(err.message);} }
-function renderApp(){ $("#appShell").classList.add("ready"); $("#userName").textContent=user.name; $("#userBranch").textContent=user.branch; $("#points").textContent=user.totalPoints; $("#level").textContent=user.currentLevel; showDashboard(); }
+async function login(e){ e.preventDefault(); try { const d=await api("/api/auth/login",{method:"POST",body:JSON.stringify({email:$("#loginEmail").value,password:$("#loginPassword").value})}); setToken(d.token); user=d.user; renderApp(); page("dashboard"); } catch(e){ toast(e.message); } }
+async function register(e){ e.preventDefault(); try { const d=await api("/api/auth/register",{method:"POST",body:JSON.stringify({name:$("#regName").value,email:$("#regEmail").value,password:$("#regPassword").value,education:$("#regEducation").value,branch:$("#regBranch").value})}); setToken(d.token); user=d.user; renderApp(); page("dashboard"); } catch(e){ toast(e.message); } }
+function renderApp(){ $("#appShell").classList.add("ready"); $("#userName").textContent=user.name; $("#userBranch").textContent=user.branch; $("#points").textContent=user.totalPoints; $("#level").textContent=user.currentLevel; }
 async function refresh(){ user=(await api("/api/me")).user; $("#userName").textContent=user.name; $("#points").textContent=user.totalPoints; $("#level").textContent=user.currentLevel; }
 
 async function boot() {
@@ -178,13 +179,7 @@ async function showDashboard(){ if(!user)return; page("dashboard");
       const totalPoints = students.reduce((sum, s)=>sum + Number(s.totalPoints || 0), 0);
       const completedTotal = students.reduce((sum, s)=>sum + (Array.isArray(s.completedCourses) ? s.completedCourses.length : 0), 0);
       const branchBreakdown = (summary.branches || []).map(b => `<span class="branch-chip"><b>${esc(b.branch)}</b><small>${b.count}</small></span>`).join("");
-      $("#dashboardContent").innerHTML = `<div class="hero"><div><p class="eyebrow">ADMIN DASHBOARD</p><h1>${esc(user.name)} 👋</h1><p>All students • class progress overview</p></div><div class="hero-badge">👑 Admin</div></div>
-      <div class="stats"><div><b>${summary.totalStudents ?? students.length}</b><span>Students</span></div><div><b>${summary.totalCompletedCourses ?? completedTotal}</b><span>Courses Completed</span></div><div><b>${summary.totalPoints ?? totalPoints}</b><span>Total Points</span></div></div>
-      <div class="card"><h2>Branch Summary</h2><div class="branch-summary">${branchBreakdown || `<span class="branch-chip"><b>All</b><small>0</small></span>`}</div></div>
-      <div class="card"><h2>Student Progress</h2><div class="admin-list">
-        <div class="admin-list-head"><span>Name</span><span>Branch</span><span>Education</span><span>Level</span><span>Points</span><span>Completed</span></div>
-        ${students.map(s => `<div class="admin-student-row"><span><b>${esc(s.name)}</b><small>${esc(s.email)}</small></span><span><b>${esc(s.branch)}</b><small>${esc(s.role || "student")}</small></span><span><b>${esc(s.education)}</b><small>${esc(s.selectedCourse || "No course")}</small></span><span><b>Level ${esc(s.currentLevel)}</b><small>Avg ${esc(summary.averageLevel ?? 1)}</small></span><span><b>${esc(s.totalPoints)}</b><small>points</small></span><span><b>${Array.isArray(s.completedCourses) ? s.completedCourses.length : 0}</b><small>courses</small></span></div>`).join("") || `<p>No students found.</p>`}
-      </div></div>`;
+      $("#dashboardContent").innerHTML = `<div class="hero"><div><p class="eyebrow">ADMIN DASHBOARD</p><h1>${esc(user.name)} 👋</h1><p>All students • class progress overview</p></div><div class="stats"><div><b>${summary.totalStudents ?? students.length}</b><span>Students</span></div><div><b>${summary.totalCompletedCourses ?? completedTotal}</b><span>Courses Completed</span></div><div><b>${summary.averagePoints ?? 0}</b><span>Avg Points</span></div></div></div><div class="card"><h2>Branch Summary</h2><div class="branch-summary">${branchBreakdown || `<span class="branch-chip"><b>All</b><small>0</small></span>`}</div></div><div class="card"><h2>Student Progress</h2><div class="admin-list"><div class="admin-list-head"><span>Name</span><span>Branch</span><span>Education</span><span>Level</span><span>Points</span><span>Completed</span></div>${students.map(s => `<div class="admin-student-row"><span><b>${esc(s.name)}</b><small>${esc(s.email)}</small></span><span><b>${esc(s.branch)}</b><small>${esc(s.role || "student")}</small></span><span>${esc(s.education)}</span><span><b>${s.currentLevel || 1}</b></span><span><b>${s.totalPoints || 0}</b></span><span>${Array.isArray(s.completedCourses) ? s.completedCourses.length : 0}</span></div>`).join("")}</div></div>`;
       return;
     } catch (e) {
       $("#dashboardContent").innerHTML = `<div class="card"><h2>Admin dashboard</h2><p>${esc(e.message)}</p></div>`;
@@ -192,10 +187,10 @@ async function showDashboard(){ if(!user)return; page("dashboard");
     }
   }
 
-  const n=nextLevel(user.totalPoints); const currentLevelIndex=Math.max(0, Math.min(levelInfo.length - 1, (user.currentLevel || 1) - 1)); const currentLevelInfo=levelInfo[currentLevelIndex] || levelInfo[0]; const startPoints=currentLevelInfo.points || 0; const nextPoints=n ? n.points : levelInfo[levelInfo.length - 1].points; const denominator = Math.max(1, nextPoints - startPoints); const numerator = Math.max(0, user.totalPoints - startPoints); const pct=n ? Math.min(100, Math.max(0, Math.round((numerator / denominator) * 100))) : 100; $("#dashboardContent").innerHTML=`<div class="hero"><div><p class="eyebrow">WELCOME BACK</p><h1>${esc(user.name)} 👋</h1><p>${esc(user.branch)} • Keep learning, keep building.</p></div><div class="hero-badge">🏆 Level ${user.currentLevel}</div></div><div class="stats"><div><b>${user.totalPoints}</b><span>Points</span></div><div><b>${user.currentLevel}</b><span>Current Level</span></div><div><b>${user.completedCourses.length}</b><span>Courses Completed</span></div></div><div class="card"><h2>Progress to next level</h2><div class="progress"><i style="width:${pct}%"></i></div><p>${n?`${n.points-user.totalPoints} points remaining for Level ${n.level}.`:`You reached the highest level!`}</p></div><div class="card"><h2>Your selected course</h2><p>${user.selectedCourse?esc(user.selectedCourse.replace(/-/g," ")):"No course selected yet."}</p><button class="primary" id="dashCourses">Explore Courses</button></div>`; $("#dashCourses").onclick=showCourses;
+  const n=nextLevel(user.totalPoints); const currentLevelIndex=Math.max(0, Math.min(levelInfo.length - 1, (user.currentLevel || 1) - 1)); const currentLevelInfo=levelInfo[currentLevelIndex] || levelInfo[0]; $("#dashboardContent").innerHTML=`<div class="hero"><div><p class="eyebrow">YOUR PROGRESS</p><h1>${esc(user.name)} 👋</h1><p>Level ${user.currentLevel} • ${user.totalPoints} points</p></div><div class="progress-bar"><div class="progress-fill" style="width:${user.totalPoints > n?.points ? 100 : Math.round((user.totalPoints / Math.max(1, n?.points || 100)) * 100)}%"></div></div><p class="progress-text">${user.totalPoints} / ${n?.points || 5200} to Level ${(user.currentLevel || 1) + 1}</p></div><div class="card"><h2>Completed Courses</h2><p>${Array.isArray(user.completedCourses) ? user.completedCourses.length : 0} courses</p></div>`;
 }
 
-async function showCourses(){ page("courses"); const courses=branchCourses(user.branch); $("#coursesTitle").textContent=`Courses for ${user.branch}`; $("#courseGrid").innerHTML=courses.map(c=>`<button class="course-card ${user.selectedCourse===c.id?"selected":""}" data-id="${esc(c.id)}"><span>${c.icon}</span><strong>${esc(c.name)}</strong><small>${esc(c.category)} • 5 levels</small>${user.selectedCourse===c.id?`<em>Selected</em>`:""}</button>`).join(""); document.querySelectorAll(".course-card").forEach(b=>b.onclick=()=>openCourse(b.dataset.id)); }
+async function showCourses(){ page("courses"); const courses=branchCourses(user.branch); $("#coursesTitle").textContent=`Courses for ${user.branch}`; $("#courseGrid").innerHTML=courses.map(c=>`<button onclick="openCourse('${c.id}')" class="course-card"><div class="course-icon">${c.icon}</div><div class="course-name">${esc(c.name)}</div><small>${c.category}</small></button>`).join(""); }
 
 async function openCourse(id){ try { const d=await selectCourse(id); user=d.user; renderCourse(d.course,d.state); } catch(e){toast(e.message);} }
 
@@ -209,10 +204,28 @@ function openYoutubeSearch(query){
   }
 }
 
-function renderCourse(c,s){ page("courseDetail"); $("#courseName").textContent=`${c.icon} ${c.name}`; $("#courseMeta").textContent=`${user.branch} • Basics to Pro`; $("#levelList").innerHTML=c.levels.map((x,i)=>{ const unlocked=s.unlocked[i]; const done=s.completed.includes(i+1); return `<div class="level-card ${done?"done":""} ${unlocked?"":"locked"}"><div><span class="level-num">${done?"✓":i+1}</span><div><b>${esc(x.title)}</b><p>${x.topics.length} step-by-step topics</p></div></div><div class="level-actions">${unlocked?`<button class="secondary lessonBtn" data-level="${i+1}">Open</button>`:`<span>🔒 Locked</span>`}${unlocked&&!done?`<button class="primary completeBtn" data-level="${i+1}">Complete +50</button>`:""}</div></div>`}).join(""); document.querySelectorAll(".lessonBtn").forEach(b=>b.onclick=()=>openLesson(c,Number(b.dataset.level))); document.querySelectorAll(".completeBtn").forEach(b=>b.onclick=async()=>{try{const d=await completeLevel(c.id,Number(b.dataset.level));user=d.user;renderCourse(d.course||c,d.state);toast("Level completed! +50 points");}catch(e){toast(e.message);}}); $("#certificateBtn").style.display=user.completedCourses.includes(c.id)?"inline-flex":"none"; $("#certificateBtn").onclick=showCertificate; }
+function renderCourse(c,s){ page("courseDetail"); $("#courseName").textContent=`${c.icon} ${c.name}`; $("#courseMeta").textContent=`${user.branch} • Basics to Pro`; $("#levelList").innerHTML=c.levels.map((l,i)=>`<button class="level-button ${s.unlocked[i] ? "" : "locked"}" onclick="openLesson(${i}, ${c.id})">${s.unlocked[i] ? "✓" : "🔒"} Level ${i+1}: ${esc(l.title)}</button>`).join(""); }
 
-function openLesson(c,n){
-  const l=c.levels[n-1];
+function topicCompletionKey(courseId, level, topicTitle) {
+  return `${courseId}:${level}:${topicTitle}`;
+}
+
+function topicStatus(courseId, level, topicTitle) {
+  if (!user) return "Not Started";
+  const key = topicCompletionKey(courseId, level, topicTitle);
+  const progress = user.topicProgress?.[courseId]?.[key] || {};
+  if (progress.completed === true) return "Completed";
+  if (progress.started === true || progress.viewed === true || progress.learned === true) return "In Progress";
+  return "Not Started";
+}
+
+function openLesson(levelIndex, courseId){
+  const courseIdStr = String(courseId);
+  const c = Object.values(allCourses).flat().find(course => course.id === courseIdStr);
+  if (!c) { toast("Course not found"); return; }
+  
+  const n = levelIndex + 1;
+  const l = c.levels[levelIndex];
   page("lesson");
   $("#lessonTitle").textContent=`Level ${n} — ${l.title}`;
 
@@ -221,10 +234,13 @@ function openLesson(c,n){
     const definition = topic?.definition || `Definition for ${title}.`;
     const explanation = topic?.explanation || `Explanation for ${title}.`;
     const example = topic?.example || `Example for ${title}.`;
+    const status = topicStatus(c.id, n, title);
+    const statusClass = status.toLowerCase().replace(/\s+/g, '-');
     return `<article class="lesson-document-card">
       <div class="lesson-document-head">
         <span class="lesson-document-tag">Course Document</span>
         <h3>${esc(title)}</h3>
+        <span class="topic-status ${statusClass}">${status}</span>
       </div>
       <div class="lesson-doc-aligned">
         <section class="lesson-doc-section">
@@ -247,7 +263,7 @@ function openLesson(c,n){
     </article>`;
   };
 
-  const topicButtons = l.topics.map((topic, i) => `<button class="lesson-topic-button ${i === 0 ? 'active' : ''}" data-topic-index="${i}">${esc(topic.title)}</button>`).join("");
+  const topicButtons = l.topics.map((topic, i) => `<button class="lesson-topic-button ${i === 0 ? 'active' : ''}" data-topic-index="${i}">${esc(topic.title)} <span class="topic-status-mini">${topicStatus(c.id, n, topic.title).toLowerCase().replace(/\s+/g, '-')}</span></button>`).join("");
   $("#lessonBody").innerHTML=`<div class="lesson-document-shell">
     <div class="lesson-topic-buttons">${topicButtons}</div>
     <div class="lesson-document-content">${renderConcept(l.topics[0], 0)}</div>
@@ -268,14 +284,14 @@ function openLesson(c,n){
 }
 
 async function showAI(){ page("ai"); if(!user.selectedCourse) toast("Select a course first for better AI context."); }
-async function askAI(e){ e.preventDefault(); const q=$("#aiInput").value.trim(); if(!q)return; $("#aiAnswer").innerHTML=`<div class="typing">NEXA is thinking…</div>`; try{const d=await api("/api/ai",{method:"POST",body:JSON.stringify({question:q})}); $("#aiAnswer").innerHTML=`<div class="answer">${esc(d.answer).replace(/\n/g,"<br>")}${d.liveSource?`<p><a target="_blank" href="${esc(d.liveUrl)}">Verified source: ${esc(d.liveSource)}</a></p>`:""}</div>`; if($("#voiceEnabled").checked)speak(d.answer,$("#aiLanguage").value,$("#aiVoice").value); }catch(e){toast(e.message);} }
-async function showTest(){ page("test"); $("#testArea").innerHTML=`<div class="card"><h2>Daily Test</h2><p>10 questions • 100 marks • earn 10 points for every correct answer.</p><button class="primary" id="startTestInner">Start Personalized Test</button></div>`; $("#startTestInner").onclick=startTest; }
-async function startTest(){ try{const d=await api("/api/test/generate",{method:"POST",body:"{}"}); testId=d.testId; testQuestions=d.questions; $("#testArea").innerHTML=testQuestions.map((q,i)=>`<div class="card question"><b>${i+1}. ${esc(q.question)}</b>${q.options.map((o,j)=>`<label><input type="radio" name="q${i}" value="${j}"> ${esc(o)}</label>`).join("")}</div>`).join("")+`<button class="primary" id="submitTestInner">Submit Test</button>`; $("#submitTestInner").onclick=submitTest;}catch(e){toast(e.message);} }
-async function submitTest(){ if(!testId)return; const answers=testQuestions.map((_,i)=>Number(document.querySelector(`input[name="q${i}"]:checked`)?.value ?? -1)); try{const d=await api("/api/test/submit",{method:"POST",body:JSON.stringify({testId,answers})}); await refresh(); $("#testArea").innerHTML=`<div class="result"><h2>🎉 Test Complete</h2><p>Score: <b>${d.score}/100</b></p><p>Points earned: <b>+${d.points}</b></p><p>Total points: <b>${d.totalPoints}</b></p><p>Current level: <b>${d.level}</b></p></div>`; testId=null;}catch(e){toast(e.message);} }
-async function showAssignment(){ page("assignment"); $("#assignmentArea").innerHTML=`<div class="card"><h2>Assignment</h2><p>Complete a practical task from your selected course. A successful submission gives <b>50 points</b>.</p><button class="primary" id="startAssignmentInner">Start Assignment</button></div>`; $("#startAssignmentInner").onclick=startAssignment; }
-async function startAssignment(){try{const d=await api("/api/assignment/start",{method:"POST",body:"{}"});assignmentId=d.task.id;$("#assignmentArea").innerHTML=`<div class="card"><h2>${esc(d.task.title)}</h2><p>${esc(d.task.prompt)}</p><textarea id="assignmentAnswer" placeholder="Write your solution, steps, explanation or code here..."></textarea><button class="primary" id="submitAssignmentInner">Submit +50 Points</button></div>`;$("#submitAssignmentInner").onclick=submitAssignment;}catch(e){toast(e.message);}}
-async function submitAssignment(){try{const d=await api("/api/assignment/submit",{method:"POST",body:JSON.stringify({assignmentId,answer:$("#assignmentAnswer").value})});await refresh();$("#assignmentArea").innerHTML=`<div class="result"><h2>✅ Assignment Submitted</h2><p>Points earned: <b>+${d.points}</b></p><p>Total points: <b>${d.totalPoints}</b></p></div>`;assignmentId=null;}catch(e){toast(e.message);}}
-function showProfile(){page("profile");$("#profileArea").innerHTML=`<div class="card profile"><div class="avatar">${esc(user.name[0]||"S").toUpperCase()}</div><h2>${esc(user.name)}</h2><p>${esc(user.email)}</p><p>${esc(user.education)} • ${esc(user.branch)}</p><div class="stats"><div><b>${user.totalPoints}</b><span>Points</span></div><div><b>${user.currentLevel}</b><span>Level</span></div></div></div>`;}
-async function showCertificate(){try{const d=await api("/api/certificate");page("certificate");$("#certificateArea").innerHTML=`<div class="certificate"><div class="cert-brand">SKILLNEXA</div><div class="cert-title">CERTIFICATE OF COMPLETION</div><p>This certificate is proudly presented to</p><h1>${esc(d.name)}</h1><p>for successfully completing the course</p><h2>${esc(d.course)}</h2><div class="appreciation">Your dedication, consistency, and commitment to learning are truly appreciated.<br>Keep learning, keep building, and keep growing.</div><div class="cert-footer"><span>SkillNexa Learning Platform</span><span>${new Date(d.completedAt).toLocaleDateString()}</span></div></div><div class="cert-buttons"><button class="primary" onclick="window.print()">🖨️ Print / Save PDF</button><button class="secondary" id="backCourse">Back to Course</button></div>`;$("#backCourse").onclick=()=>showCourses();}catch(e){toast(e.message);}}
+async function askAI(e){ e.preventDefault(); const q=$("#aiInput").value.trim(); if(!q)return; $("#aiAnswer").innerHTML=`<div class="typing">NEXA is thinking…</div>`; try{const d=await api("/api/ai",{method:"POST",body:JSON.stringify({question:q})}); $("#aiAnswer").innerHTML=`<div class="ai-answer">${esc(d.answer)}</div>` + (d.liveSource ? `<p class="ai-source">Source: ${d.liveSource}</p>` : ""); $("#aiInput").value=""; } catch(e){ $("#aiAnswer").innerHTML=`<div class="error">${esc(e.message)}</div>`; } }
+async function showTest(){ page("test"); $("#testArea").innerHTML=`<div class="card"><h2>Daily Test</h2><p>10 questions • 100 marks • earn 10 points for every correct answer.</p><button class="primary" onclick="startTest()">Generate Test</button></div>`; }
+async function startTest(){ try{const d=await api("/api/test/generate",{method:"POST",body:"{}"}); testId=d.testId; testQuestions=d.questions; $("#testArea").innerHTML=testQuestions.map((q,i)=>`<div class="test-question"><p><b>Q${i+1}.</b> ${esc(q.question)}</p><div class="options">${q.options.map((o,j)=>`<label><input type="radio" name="q${i}" value="${j}"> ${esc(o)}</label>`).join("")}</div></div>`).join("") + `<button class="primary" onclick="submitTest()">Submit Test</button>`; } catch(e){toast(e.message);} }
+async function submitTest(){ if(!testId)return; const answers=testQuestions.map((_,i)=>Number(document.querySelector(`input[name="q${i}"]:checked`)?.value ?? -1)); try{const d=await api("/api/test/submit",{method:"POST",body:JSON.stringify({testId,answers})}); toast(d.message); refresh(); showTest(); } catch(e){toast(e.message);} }
+async function showAssignment(){ page("assignment"); $("#assignmentArea").innerHTML=`<div class="card"><h2>Assignment</h2><p>Complete a practical task from your selected course. A successful submission earns 20 points.</p><button class="primary" onclick="startAssignment()">Start Assignment</button></div>`; }
+async function startAssignment(){try{const d=await api("/api/assignment/start",{method:"POST",body:"{}"}); assignmentId=d.task.id; $("#assignmentArea").innerHTML=`<div class="card"><h2>${esc(d.task.title)}</h2><p>${esc(d.task.prompt)}</p><div class="questions">${d.task.questions.map((q,i)=>`<div class="q"><p><b>Q${i+1}.</b> ${esc(q.question)}</p></div>`).join("")}</div><textarea id="assignmentAnswer" placeholder="Type your answer here (minimum 20 characters)…" class="full-width"></textarea><button class="primary" onclick="submitAssignment()">Submit</button></div>`; } catch(e){toast(e.message);} }
+async function submitAssignment(){try{const d=await api("/api/assignment/submit",{method:"POST",body:JSON.stringify({assignmentId,answer:$("#assignmentAnswer").value})}); await refresh(); $("#assignmentArea").innerHTML=`<div class="card"><h2>${d.passed ? "✓ Passed" : "✗ Not yet"}</h2><p>${d.message}</p><button class="primary" onclick="showAssignment()">Back</button></div>`; } catch(e){toast(e.message);} }
+function showProfile(){page("profile");$("#profileArea").innerHTML=`<div class="card profile"><div class="avatar">${esc(user.name[0]||"S").toUpperCase()}</div><h2>${esc(user.name)}</h2><p>${esc(user.email)}</p><p>Level ${user.currentLevel} • ${user.totalPoints} points</p><p>${user.branch} — ${user.education}</p><button class="primary" onclick="showCertificate()">View Certificate</button></div>`; }
+async function showCertificate(){try{const d=await api("/api/certificate");page("certificate");$("#certificateArea").innerHTML=`<div class="certificate"><div class="cert-brand">SKILLNEXA</div><div class="cert-text"><p class="cert-title">Certificate of Completion</p><p class="cert-name">${esc(user.name)}</p><p class="cert-desc">For successfully completing</p><p class="cert-course">${esc(d.courseName || "Course")}</p><p class="cert-date">${new Date().toLocaleDateString()}</p></div></div>`; } catch(e){toast(e.message);} }
 
 window.addEventListener("load", boot);
