@@ -205,7 +205,7 @@ function openYoutubeSearch(query){
   }
 }
 
-function renderCourse(c,s){ page("courseDetail"); $("#courseName").textContent=`${c.icon} ${c.name}`; $("#courseMeta").textContent=`${user.branch} • Basics to Pro`; $("#levelList").innerHTML=c.levels.map((l,i)=>`<button class="level-button ${s.unlocked[i] ? "" : "locked"}" onclick="openLesson(${i}, ${c.id})">${s.unlocked[i] ? "✓" : "🔒"} Level ${i+1}: ${esc(l.title)}</button>`).join(""); }
+function renderCourse(c,s){ page("courseDetail"); $("#courseName").textContent=`${c.icon} ${c.name}`; $("#courseMeta").textContent=`${user.branch} • Basics to Pro`; $("#levelList").innerHTML=c.levels.map((l,i)=>`<button class="level-button ${s.unlocked[i] ? "" : "locked"}" onclick="openLesson(${i}, '${c.id}')">${s.unlocked[i] ? "✓" : "🔒"} Level ${i+1}: ${esc(l.title)}</button>`).join(""); }
 
 function topicCompletionKey(courseId, level, topicTitle) {
   return `${courseId}:${level}:${topicTitle}`;
@@ -237,10 +237,10 @@ async function handleVideoEnded(courseId, level, topicTitle) {
     user = d.user;
     await refresh();
     
-    const statusElement = document.querySelector(`[data-completion-key="${key}"]`);
-    if (statusElement) {
-      statusElement.textContent = "Completed";
-      statusElement.className = "topic-status completed";
+    const completionArea = document.querySelector(`[data-completion-area="${key}"]`);
+    if (completionArea) {
+      completionArea.innerHTML = '<span class="topic-completion-badge">✓ Completed</span>';
+      completionArea.classList.add("video-completed");
     }
     
     toast("Topic completed!");
@@ -269,11 +269,17 @@ function openLesson(levelIndex, courseId){
     const statusClass = status.toLowerCase().replace(/\s+/g, '-');
     const key = topicCompletionKey(c.id, n, title);
     
+    let completionAreaHtml = '';
+    if (status === "Completed") {
+      completionAreaHtml = `<div class="lesson-completion-area" data-completion-area="${key}"><span class="topic-completion-badge">✓ Completed</span></div>`;
+    } else {
+      completionAreaHtml = `<div class="lesson-completion-area" data-completion-area="${key}"></div>`;
+    }
+    
     return `<article class="lesson-document-card">
       <div class="lesson-document-head">
         <span class="lesson-document-tag">Course Document</span>
         <h3>${esc(title)}</h3>
-        <span class="topic-status ${statusClass}" data-completion-key="${key}">${status}</span>
       </div>
       <div class="lesson-doc-aligned">
         <section class="lesson-doc-section">
@@ -293,6 +299,7 @@ function openLesson(levelIndex, courseId){
         <button class="secondary" data-youtube="${esc(c.name + " " + title + " tutorial")}" data-topic-title="${esc(title)}" data-course-id="${c.id}" data-level="${n}">🎥 YouTube</button>
         <button class="secondary" data-speak="${esc(`Learn ${title} in ${c.name}.`)}">🔊 Listen</button>
       </div>
+      ${completionAreaHtml}
     </article>`;
   };
 
@@ -307,27 +314,27 @@ function openLesson(levelIndex, courseId){
       const idx = Number(b.dataset.topicIndex);
       document.querySelectorAll(".lesson-topic-button").forEach(x => x.classList.toggle("active", x === b));
       $(".lesson-document-content").innerHTML = renderConcept(l.topics[idx], idx);
-      bindYoutubeButtons();
+      bindYoutubeButtons(c, n);
       bindSpeakButtons();
     };
   });
 
-  bindYoutubeButtons();
+  bindYoutubeButtons(c, n);
   bindSpeakButtons();
 }
 
-function bindYoutubeButtons() {
+function bindYoutubeButtons(course, level) {
   document.querySelectorAll("button[data-youtube]").forEach(btn => {
     btn.onclick = () => {
       const query = btn.dataset.youtube;
       const topicTitle = btn.dataset.topicTitle;
       const courseId = btn.dataset.courseId;
-      const level = btn.dataset.level;
+      const lvl = btn.dataset.level;
       
-      if (topicTitle && courseId && level) {
+      if (topicTitle && courseId && lvl) {
         videoCompletionTracking[query] = {
           courseId: courseId,
-          level: parseInt(level),
+          level: parseInt(lvl),
           topicTitle: topicTitle
         };
       }
