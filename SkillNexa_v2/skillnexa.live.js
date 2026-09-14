@@ -91,7 +91,8 @@ let testId = null;
 let testQuestions = [];
 let assignmentId = null;
 const state = { page:"login", aiLanguage:"Auto", aiVoice:"Female" };
-let currentVideoPlayer = null;
+let currentYouTubePlayer = null;
+let videoCompletionTracking = {};
 
 function page(id) { document.querySelectorAll(".page").forEach(x => x.classList.remove("active")); const p = document.getElementById(id); if (p) p.classList.add("active"); state.page=id; }
 function toast(msg) { const t = $("#toast"); t.textContent=msg; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),2800); }
@@ -219,6 +220,36 @@ function topicStatus(courseId, level, topicTitle) {
   return "Not Started";
 }
 
+async function handleVideoEnded(courseId, level, topicTitle) {
+  try {
+    const key = topicCompletionKey(courseId, level, topicTitle);
+    const d = await api("/api/topic/video-progress", {
+      method: "POST",
+      body: JSON.stringify({
+        courseId: courseId,
+        level: level,
+        topicTitle: topicTitle,
+        watchedPercent: 100,
+        ended: true
+      })
+    });
+    
+    user = d.user;
+    await refresh();
+    
+    const statusElement = document.querySelector(`[data-completion-key="${key}"]`);
+    if (statusElement) {
+      statusElement.textContent = "Completed";
+      statusElement.className = "topic-status completed";
+    }
+    
+    toast("Topic completed!");
+  } catch (e) {
+    console.error("Error marking video as completed:", e);
+    toast("Error: " + e.message);
+  }
+}
+
 function openLesson(levelIndex, courseId){
   const courseIdStr = String(courseId);
   const c = Object.values(allCourses).flat().find(course => course.id === courseIdStr);
@@ -236,11 +267,13 @@ function openLesson(levelIndex, courseId){
     const example = topic?.example || `Example for ${title}.`;
     const status = topicStatus(c.id, n, title);
     const statusClass = status.toLowerCase().replace(/\s+/g, '-');
+    const key = topicCompletionKey(c.id, n, title);
+    
     return `<article class="lesson-document-card">
       <div class="lesson-document-head">
         <span class="lesson-document-tag">Course Document</span>
         <h3>${esc(title)}</h3>
-        <span class="topic-status ${statusClass}">${status}</span>
+        <span class="topic-status ${statusClass}" data-completion-key="${key}">${status}</span>
       </div>
       <div class="lesson-doc-aligned">
         <section class="lesson-doc-section">
@@ -257,7 +290,7 @@ function openLesson(levelIndex, courseId){
         </section>
       </div>
       <div class="lesson-links">
-        <button class="secondary" data-youtube="${esc(c.name + " " + title + " tutorial")}">🎥 YouTube</button>
+        <button class="secondary" data-youtube="${esc(c.name + " " + title + " tutorial")}" data-topic-title="${esc(title)}" data-course-id="${c.id}" data-level="${n}">🎥 YouTube</button>
         <button class="secondary" data-speak="${esc(`Learn ${title} in ${c.name}.`)}">🔊 Listen</button>
       </div>
     </article>`;
@@ -274,13 +307,40 @@ function openLesson(levelIndex, courseId){
       const idx = Number(b.dataset.topicIndex);
       document.querySelectorAll(".lesson-topic-button").forEach(x => x.classList.toggle("active", x === b));
       $(".lesson-document-content").innerHTML = renderConcept(l.topics[idx], idx);
-      document.querySelectorAll("[data-speak]").forEach(s => s.onclick = () => speak(s.dataset.speak, $("#aiLanguage").value, $("#aiVoice").value));
-      document.querySelectorAll("[data-youtube]").forEach(y => y.onclick = () => openYoutubeSearch(y.dataset.youtube));
+      bindYoutubeButtons();
+      bindSpeakButtons();
     };
   });
 
-  document.querySelectorAll("[data-speak]").forEach(b => b.onclick = () => speak(b.dataset.speak, $("#aiLanguage").value, $("#aiVoice").value));
-  document.querySelectorAll("[data-youtube]").forEach(y => y.onclick = () => openYoutubeSearch(y.dataset.youtube));
+  bindYoutubeButtons();
+  bindSpeakButtons();
+}
+
+function bindYoutubeButtons() {
+  document.querySelectorAll("button[data-youtube]").forEach(btn => {
+    btn.onclick = () => {
+      const query = btn.dataset.youtube;
+      const topicTitle = btn.dataset.topicTitle;
+      const courseId = btn.dataset.courseId;
+      const level = btn.dataset.level;
+      
+      if (topicTitle && courseId && level) {
+        videoCompletionTracking[query] = {
+          courseId: courseId,
+          level: parseInt(level),
+          topicTitle: topicTitle
+        };
+      }
+      
+      openYoutubeSearch(query);
+    };
+  });
+}
+
+function bindSpeakButtons() {
+  document.querySelectorAll("button[data-speak]").forEach(s => {
+    s.onclick = () => speak(s.dataset.speak, $("#aiLanguage").value, $("#aiVoice").value);
+  });
 }
 
 async function showAI(){ page("ai"); if(!user.selectedCourse) toast("Select a course first for better AI context."); }
